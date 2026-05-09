@@ -1,0 +1,132 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Role lookup (Relational Validation)
+    function getUserData(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
+    }
+
+    function isOrgMember(orgId) {
+      return isVerified() && getUserData(request.auth.uid).organizationId == orgId;
+    }
+
+    function isOrgAdmin(orgId) {
+      return isOrgMember(orgId) && getUserData(request.auth.uid).role == 'admin';
+    }
+
+    function isSuperAdmin() {
+      return isVerified() && getUserData(request.auth.uid).role == 'super_admin';
+    }
+
+    // --- Entity Specific Validations ---
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'organizationId', 'role', 'status'])
+        && data.email is string && data.email.size() <= 100
+        && data.organizationId is string && data.organizationId.size() <= 64
+        && data.role in ['super_admin', 'admin', 'employee']
+        && data.status in ['active', 'invited', 'suspended']
+        && (data.displayName == null || (data.displayName is string && data.displayName.size() <= 100));
+    }
+
+    function isValidCustomer(data) {
+      return data.keys().hasAll(['organizationId', 'name', 'status'])
+        && data.organizationId is string
+        && data.name is string && data.name.size() <= 100
+        && data.status in ['active', 'inactive'];
+    }
+
+    function isValidLead(data) {
+      return data.keys().hasAll(['organizationId', 'name', 'stage'])
+        && data.organizationId is string
+        && data.name is string && data.name.size() <= 100
+        && data.stage in ["New Lead", "Contacted", "Qualified", "Negotiation", "Converted", "Lost"];
+    }
+
+    function isValidTask(data) {
+      return data.keys().hasAll(['organizationId', 'title', 'status'])
+        && data.organizationId is string
+        && data.title is string && data.title.size() <= 200
+        && data.status in ["todo", "in_progress", "completed", "archived"];
+    }
+
+    function isValidOrganization(data) {
+      return data.keys().hasAll(['name', 'createdBy'])
+        && data.name is string && data.name.size() <= 100
+        && data.createdBy == request.auth.uid;
+    }
+
+    // --- Match Rules ---
+
+    // Users collection
+    match /users/{userId} {
+      allow get: if isSignedIn() && (request.auth.uid == userId || isSuperAdmin());
+      allow list: if isSuperAdmin(); // Restrict wide listing
+      
+      allow create: if isVerified() && request.auth.uid == userId && isValidUser(incoming());
+      allow update: if isVerified() && isValidUser(incoming()) && (
+        (request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'status']))
+        || (isOrgAdmin(existing().organizationId) && incoming().organizationId == existing().organizationId)
+        || isSuperAdmin()
+      );
+    }
+
+    // Organizations
+    match /organizations/{orgId} {
+      allow get: if isOrgMember(orgId) || isSuperAdmin();
+      allow create: if isVerified() && isValidOrganization(incoming());
+      allow update: if isOrgAdmin(orgId) && isValidOrganization(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['name']);
+      allow list: if isSuperAdmin();
+    }
+
+    // Org-scoped Subcollections (Lead, Customer, Task, Activity)
+    match /organizations/{orgId}/{collection}/{docId} {
+      
+      // Relational check: must be a member of the organization
+      allow read: if isOrgMember(orgId) || isSuperAdmin();
+
+      allow create: if isOrgMember(orgId) && (
+        (collection == 'customers' && isValidCustomer(incoming())) ||
+        (collection == 'leads' && isValidLead(incoming())) ||
+        (collection == 'tasks' && isValidTask(incoming())) ||
+        (collection == 'activities' && request.auth.uid == incoming().userId)
+      );
+
+      allow update: if isOrgMember(orgId) && (
+        (collection == 'customers' && isValidCustomer(incoming())) ||
+        (collection == 'leads' && isValidLead(incoming())) ||
+        (collection == 'tasks' && isValidTask(incoming()))
+      ) && incoming().organizationId == existing().organizationId;
+
+      allow delete: if isOrgAdmin(orgId) || isSuperAdmin();
+    }
+  }
+}

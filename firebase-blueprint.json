@@ -1,0 +1,120 @@
+{
+  "entities": {
+    "organization": {
+      "title": "Organization",
+      "description": "A tenant organization in the CRM.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["name", "createdAt", "createdBy"]
+    },
+    "user": {
+      "title": "User",
+      "description": "A user belonging to an organization.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "organizationId": { "type": "string" },
+        "role": { "type": "string", "enum": ["super_admin", "admin", "employee"] },
+        "status": { "type": "string", "enum": ["active", "invited", "suspended"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "organizationId", "role", "status"]
+    },
+    "customer": {
+      "title": "Customer",
+      "description": "An existing customer record.",
+      "type": "object",
+      "properties": {
+        "organizationId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "company": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["organizationId", "name", "status"]
+    },
+    "lead": {
+      "title": "Lead",
+      "description": "A potential customer lead.",
+      "type": "object",
+      "properties": {
+        "organizationId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "company": { "type": "string" },
+        "stage": { "type": "string", "enum": ["New Lead", "Contacted", "Qualified", "Negotiation", "Converted", "Lost"] },
+        "assignedTo": { "type": "string" },
+        "value": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["organizationId", "name", "stage"]
+    },
+    "task": {
+      "title": "Task",
+      "description": "A task assigned to an employee.",
+      "type": "object",
+      "properties": {
+        "organizationId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "assignedTo": { "type": "string" },
+        "status": { "type": "string", "enum": ["todo", "in_progress", "completed", "archived"] },
+        "priority": { "type": "string", "enum": ["low", "medium", "high"] },
+        "dueDate": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["organizationId", "title", "status"]
+    },
+    "activity": {
+      "title": "Activity",
+      "description": "An audit log entry.",
+      "type": "object",
+      "properties": {
+        "organizationId": { "type": "string" },
+        "userId": { "type": "string" },
+        "action": { "type": "string" },
+        "entityType": { "type": "string" },
+        "entityId": { "type": "string" },
+        "metadata": { "type": "object" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["organizationId", "userId", "action", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/organizations/{orgId}": {
+      "schema": "organization",
+      "description": "Tenant organization data."
+    },
+    "/users/{userId}": {
+      "schema": "user",
+      "description": "User profiles with role and org mapping."
+    },
+    "/organizations/{orgId}/customers/{customerId}": {
+      "schema": "customer",
+      "description": "Customers for a specific organization."
+    },
+    "/organizations/{orgId}/leads/{leadId}": {
+      "schema": "lead",
+      "description": "Leads for a specific organization."
+    },
+    "/organizations/{orgId}/tasks/{taskId}": {
+      "schema": "task",
+      "description": "Tasks for a specific organization."
+    },
+    "/organizations/{orgId}/activities/{activityId}": {
+      "schema": "activity",
+      "description": "Audit trail for an organization."
+    }
+  }
+}
